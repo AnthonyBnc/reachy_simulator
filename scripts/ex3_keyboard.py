@@ -27,6 +27,8 @@ def act(name):
 
 
 STEP = np.radians(5)
+FPS = 60
+STEPS_PER_FRAME = round(1 / (FPS * model.opt.timestep))  # physics steps between redraws (~8)
 # GLFW key code -> (actuator, direction)
 KEYS = {
     265: (act("r_shoulder_pitch"), -1),  # Up: raise arm forward
@@ -50,7 +52,11 @@ def on_key(key):
 
 if __name__ == "__main__":
     with mujoco.viewer.launch_passive(model, data, key_callback=on_key) as viewer:
+        wall_start = time.perf_counter()
         while viewer.is_running():
-            mujoco.mj_step(model, data)
-            viewer.sync()
-            time.sleep(model.opt.timestep)
+            for _ in range(STEPS_PER_FRAME):
+                mujoco.mj_step(model, data)
+            viewer.sync()  # redraw ~60 times per second
+            ahead = data.time - (time.perf_counter() - wall_start)  # keep real-time speed
+            if ahead > 0:
+                time.sleep(ahead)

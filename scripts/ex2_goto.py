@@ -25,6 +25,21 @@ QADR = [model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, n)
 TORSO = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "torso")
 HAND = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "r_arm_tip")
 
+FPS = 60
+STEPS_PER_FRAME = round(1 / (FPS * model.opt.timestep))  # physics steps between redraws (~8)
+_wall_start = None
+
+
+def sync_realtime(viewer):
+    """Redraw the window and wait so simulation time matches the real clock."""
+    global _wall_start
+    if _wall_start is None:
+        _wall_start = time.perf_counter() - data.time
+    viewer.sync()
+    ahead = data.time - (time.perf_counter() - _wall_start)
+    if ahead > 0:
+        time.sleep(ahead)
+
 
 def hand_in_torso():
     """Hand position in the torso frame."""
@@ -42,9 +57,8 @@ def goto(target_deg, duration=2.0, viewer=None):
         s = 3 * s**2 - 2 * s**3                      # smooth start and stop
         data.ctrl[ACT] = start + s * (goal - start)  # moving target
         mujoco.mj_step(model, data)
-        if viewer is not None:
-            viewer.sync()
-            time.sleep(model.opt.timestep)
+        if viewer is not None and (i + 1) % STEPS_PER_FRAME == 0:
+            sync_realtime(viewer)
     reached = np.degrees(data.qpos[QADR])
     print(f"target {np.round(target_deg, 1)}\n  reached {np.round(reached, 1)}"
           f"\n  hand (torso frame) = {np.round(hand_in_torso(), 3)} m")
@@ -64,6 +78,6 @@ if __name__ == "__main__":
         goto(HOME, viewer=viewer)
 
         while viewer.is_running():  # keep the window open
-            mujoco.mj_step(model, data)
-            viewer.sync()
-            time.sleep(model.opt.timestep)
+            for _ in range(STEPS_PER_FRAME):
+                mujoco.mj_step(model, data)
+            sync_realtime(viewer)
