@@ -1,6 +1,6 @@
 # Reachy Simulator — Project Baseline
 
-> Status: **Draft v0.1** (2026-09-24)
+> Status: **Draft v0.2** (2026-09-24). P0 in progress. Step-by-step plan for the current phase: [SIMULATION_PHASE.md](SIMULATION_PHASE.md)
 > Owner: BaoAn
 > Parent project: [`reachy2-robot-controller`](../../reachy2-robot-controller) 
 
@@ -116,8 +116,8 @@ These values become the **default safety shield** config (§5.4) and the **actio
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Physics | **MuJoCo ≥ 3.x** (`mujoco` Python bindings) | On macOS the interactive viewer must be launched with `mjpython`. Headless training uses plain `python`. |
-| Robot model | Reachy 2 MJCF from Pollen's [`reachy2_mujoco`](https://github.com/pollen-robotics/reachy2_mujoco) / Reachy 2 MuJoCo assets | Vendored under `assets/` with a pinned commit. Fall back to converting the Reachy 2 URDF if needed. |
+| Physics | **MuJoCo 3.14** (`mujoco` Python bindings) | Viewer on macOS: `python -m mujoco.viewer` for the standalone viewer; `mjpython` only for scripts using `launch_passive`. Headless training uses plain `python`. Load scenes with an **absolute** path (relative paths break mesh loading). |
+| Robot model | Reachy 2 MJCF from Pollen's [`reachy2_mujoco`](https://github.com/pollen-robotics/reachy2_mujoco) | Robot files only (22 MB) vendored into `assets/reachy2/` from commit `f6d8284` (see `assets/reachy2/SOURCE.md`). Pollen's Python package (fake SDK server) is **not** installed: it pins `mujoco==3.2.6` and targets Linux. |
 | Env API | **Gymnasium ≥ 1.0** | `gymnasium.Env` + `GoalEnv`-style dict obs for goal tasks |
 | RL baselines | **Stable-Baselines3 ≥ 2.x** (+ `sb3-contrib`) | PPO, SAC, TD3, HER, (TQC, RecurrentPPO from contrib) |
 | Vectorization | `gymnasium.vector` / SB3 `SubprocVecEnv` | Optional later: MJX (JAX) for GPU-parallel training |
@@ -160,8 +160,9 @@ Key design rule: **the environment and the policy never know which backend is ru
 ### 5.1 MuJoCo model (`assets/`)
 
 - Import the Reachy 2 MJCF, keep upper body only (torso fixed to world; mobile base removed or frozen).
+- Verified facts about the model (2026-09-24): arm joint order = SDK order; actuator order ≠ joint order (left arm first), so always use name lookups; base is a `freejoint` (`mobile_base`) that must be removed; wrist roll/pitch limited to ±20°; end-effector body `r_arm_tip`, reference body `torso`. Details in [SIMULATION_PHASE.md §0.1](SIMULATION_PHASE.md).
 - Actuators: position actuators per joint, with `kp`, `damping`, `forcerange` tuned to match the real robot (§8, stage A0).
-- Add task scenes on top of the robot: `scene_reach.xml`, `scene_grasp.xml` (table + ball), `scene_head_track.xml` (moving target).
+- Add task scenes on top of the robot: `reach_scene.xml`, `grasp_scene.xml` (table + ball), `head_track_scene.xml` (moving target). Scenes live directly in `assets/` next to `reachy2/`, so include paths stay `reachy2/...` (no `../`).
 - Timestep: `0.002 s` physics; control at **10–20 Hz** (`frame_skip` 25–50). The real robot is driven at the same control rate.
 
 ### 5.2 Gymnasium environments (`reachy_sim/envs/`)
@@ -331,11 +332,13 @@ reachy_simulator/
 ├── requirements.txt
 ├── docs/
 │   ├── PROJECT_BASELINE.md      # this file
+│   ├── SIMULATION_PHASE.md      # step-by-step plan for P0–P2 (+ sim-side DR)
 │   ├── SIM_TO_REAL.md           # detailed notes, sysid results
 │   └── EXPERIMENTS.md           # experiment log / results table
 ├── assets/
-│   ├── reachy2/                 # vendored MJCF + meshes (pinned commit)
-│   └── scenes/                  # scene_reach.xml, scene_grasp.xml, ...
+│   ├── reachy2/                 # vendored MJCF + meshes (pinned commit, SOURCE.md, LICENSE)
+│   ├── test_scene.xml           # Pollen's test scene (robot + table + bottle)
+│   └── reach_scene.xml, ...     # task scenes (fixed base), next to reachy2/
 ├── configs/
 │   ├── env/                     # reach.yaml, grasp.yaml, ...
 │   ├── algo/                    # ppo.yaml, sac.yaml, sac_her.yaml, ...
@@ -349,7 +352,8 @@ reachy_simulator/
 │   ├── policies/                # scripted baselines, residual wrappers
 │   └── utils/                   # frames, units, pose helpers (ported from parent project)
 ├── scripts/
-│   ├── view_model.py            # run with mjpython on macOS
+│   ├── ex1_one_joint.py, ex2_goto.py, ex3_keyboard.py, wave_arm.py   # learning scripts
+│   ├── benchmark_env.py         # env steps/s
 │   ├── train.py                 # python scripts/train.py env=reach algo=sac
 │   ├── evaluate.py              # --backend mujoco|pollen_sim|real
 │   ├── sysid_record.py          # record real trajectories
@@ -365,16 +369,16 @@ reachy_simulator/
 
 ## 11. Milestones
 
-| Phase | Deliverable | Exit criterion |
-|---|---|---|
-| **P0 — Setup** | Repo skeleton, pinned deps, Reachy 2 MJCF loads and renders | `scripts/view_model.py` shows the robot; joint order verified against §2.3 |
-| **P1 — Env core** | `ReachyBaseEnv`, `MujocoBackend`, safety shield, T0 + T1 envs | `check_env` passes; tests green; ≥ 1,000 steps/s |
-| **P2 — Baselines** | PPO / SAC / TD3 / SAC+HER on T1, T2 | Results table in `EXPERIMENTS.md` (3 seeds each) |
-| **P3 — Real interface** | `RealBackend`, `PollenSimBackend`, dry-run mode | Policy runs end-to-end in Pollen sim; dry run on real logs sane actions |
-| **P4 — SysID + DR** | Fitted actuator params, DR config | Sim-real tracking error on T0 reduced; T1 real success ≥ 80% |
-| **P5 — Grasp** | T4 env, scripted baseline, residual RL | T4 real success ≥ 60% |
-| **P6 — Adaptation** | RMA-style module and/or real fine-tuning | Measurable reduction in sim-to-real gap vs P4 |
-| **P7 — Vision (stretch)** | Camera-based observations | T6 working in sim |
+| Phase | Deliverable | Exit criterion | Status |
+|---|---|---|---|
+| **P0 — Setup** | Repo skeleton, pinned deps, Reachy 2 MJCF loads and renders | Robot model vendored and loads ✅; joint order verified against §2.3 ✅; fixed-base scene ✅; control examples ✅; FK check vs. real robot (needs robot) | 🟡 Almost done |
+| **P1 — Env core** | `ReachyBaseEnv`, `MujocoBackend`, safety shield, T0 + T1 envs | `check_env` passes; tests green; ≥ 1,000 steps/s | ⬜ |
+| **P2 — Baselines** | PPO / SAC / TD3 / SAC+HER on T1, T2 | Results table in `EXPERIMENTS.md` (3 seeds each) | ⬜ |
+| **P3 — Real interface** | `RealBackend`, `PollenSimBackend`, dry-run mode | Policy runs end-to-end in Pollen sim; dry run on real logs sane actions | ⬜ |
+| **P4 — SysID + DR** | Fitted actuator params, DR config | Sim-real tracking error on T0 reduced; T1 real success ≥ 80% | ⬜ |
+| **P5 — Grasp** | T4 env, scripted baseline, residual RL | T4 real success ≥ 60% | ⬜ |
+| **P6 — Adaptation** | RMA-style module and/or real fine-tuning | Measurable reduction in sim-to-real gap vs P4 | ⬜ |
+| **P7 — Vision (stretch)** | Camera-based observations | T6 working in sim | ⬜ |
 
 ---
 
@@ -382,7 +386,8 @@ reachy_simulator/
 
 | Risk / question | Mitigation |
 |---|---|
-| Official MJCF may not match our robot exactly (versions, gripper, head) | Verify joint limits and kinematics against the real robot using recorded poses (§2.5) in P0 |
+| Official MJCF may not match our robot exactly (versions, gripper, head) | Verify joint limits and kinematics against the real robot using recorded poses (§2.5) in P0 ([SIMULATION_PHASE.md step 1.2](SIMULATION_PHASE.md)) |
+| Pollen's fake SDK server (`reachy2_mujoco` package) needs `mujoco==3.2.6` and Linux | Not used. We only reuse the model files; for SDK-level testing use Pollen's Docker simulation (`PollenSimBackend`) |
 | SDK 1.0.7 real-time streaming rate and latency unknown | Measure in P3; choose control rate from measurements, not assumptions |
 | Real hard joint limits not yet confirmed (parent project uses relative limits) | Read limits from the robot / Pollen config and store in `configs/safety/` |
 | Gripper contact physics in MuJoCo differ from reality | Prefer residual RL + scripted grasp for T4; randomize friction |

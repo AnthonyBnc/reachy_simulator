@@ -2,7 +2,10 @@
 
 A MuJoCo + Gymnasium setup for **Pollen Robotics' Reachy 2**. You train reinforcement learning policies in simulation, then run them on the real robot through the same interface.
 
-> **Status:** early planning (P0). Most of the code and commands below are **planned** and don't exist yet. See [docs/PROJECT_BASELINE.md](docs/PROJECT_BASELINE.md) for the full design and roadmap.
+> **Status:** P0 in progress. The environment is set up and the Reachy 2 model loads in MuJoCo. Training and evaluation commands are **planned**.
+>
+> - Next steps: [docs/SIMULATION_PHASE.md](docs/SIMULATION_PHASE.md)
+> - Full design and roadmap: [docs/PROJECT_BASELINE.md](docs/PROJECT_BASELINE.md)
 
 This project builds on [`reachy2-robot-controller`](../reachy2-robot-controller) and reuses its SDK versions, safety limits, recorded poses and grasp workflow.
 
@@ -58,13 +61,37 @@ python -m pip install -r requirements.txt
 
 ---
 
-## Usage (planned)
+## Usage
 
-View the robot model. On macOS the MuJoCo viewer needs `mjpython`:
+Activate the venv first:
 
 ```bash
-mjpython scripts/view_model.py
+source .venv/bin/activate
 ```
+
+View the robot model. Use an **absolute** path, because MuJoCo 3.14 can't find the meshes with a relative one:
+
+```bash
+python -m mujoco.viewer --mjcf=$PWD/assets/reach_scene.xml
+```
+
+`reach_scene.xml` has the base fixed (like `mobile_base: null`) and a green goal marker. `test_scene.xml` is Pollen's original, with a free base, a table and a bottle.
+
+Learning scripts, in order: `python scripts/ex1_one_joint.py`, `mjpython scripts/ex2_goto.py`, `mjpython scripts/ex3_keyboard.py`.
+
+Drive the robot from a script. Scripts that use `mujoco.viewer.launch_passive` need `mjpython` on macOS:
+
+```bash
+mjpython scripts/wave_arm.py
+```
+
+| What | Command |
+|---|---|
+| Just look at a scene | `python -m mujoco.viewer --mjcf=$PWD/assets/<scene>.xml` |
+| Script with `launch_passive` | `mjpython scripts/<script>.py` |
+| Headless (training, tests) | `python scripts/<script>.py` |
+
+### Planned
 
 Train a baseline:
 
@@ -112,16 +139,17 @@ tensorboard --logdir runs
 
 ---
 
-## Project layout (planned)
+## Project layout
 
 ```txt
 reachy_simulator/
-├── assets/        # Reachy 2 MJCF + task scenes
+├── assets/        # Reachy 2 model (vendored from Pollen, see assets/reachy2/SOURCE.md) + scenes
+├── third_party/   # full clone of pollen-robotics/reachy2_mujoco, reference only (gitignored)
 ├── configs/       # env / algo / safety / robot YAML
 ├── reachy_sim/    # envs, backends, safety, randomization, policies, utils
 ├── scripts/       # view_model, train, evaluate, sysid
 ├── tests/
-├── docs/          # PROJECT_BASELINE.md, SIM_TO_REAL.md, EXPERIMENTS.md
+├── docs/          # PROJECT_BASELINE.md, SIMULATION_PHASE.md, (later) SIM_TO_REAL.md, EXPERIMENTS.md
 └── runs/          # checkpoints and logs (gitignored)
 ```
 
@@ -145,7 +173,7 @@ For all limits and the full protocol, see [docs/PROJECT_BASELINE.md §2.4, §5.4
 
 | Phase | Goal |
 |---|---|
-| P0 | Repo setup, Reachy 2 model loads and renders |
+| P0 🟡 | Repo setup, Reachy 2 model loads and renders |
 | P1 | Base env, MuJoCo backend, safety shield, T0/T1 |
 | P2 | Baseline results (PPO, SAC, TD3, SAC+HER) |
 | P3 | Real and Pollen-sim backends, dry-run mode |
@@ -159,6 +187,7 @@ For all limits and the full protocol, see [docs/PROJECT_BASELINE.md §2.4, §5.4
 ## References
 
 - [Project baseline](docs/PROJECT_BASELINE.md)
+- [Simulation phase plan](docs/SIMULATION_PHASE.md)
 - [pollen-robotics/reachy2_mujoco](https://github.com/pollen-robotics/reachy2_mujoco)
 - [Reachy 2 documentation](https://docs.pollen-robotics.com/)
 - [MuJoCo](https://mujoco.readthedocs.io/) · [Gymnasium](https://gymnasium.farama.org/) · [Stable-Baselines3](https://stable-baselines3.readthedocs.io/)

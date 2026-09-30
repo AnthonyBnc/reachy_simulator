@@ -1,0 +1,56 @@
+<!--
+  Reach task scene: Reachy 2 with a FIXED base (matches mobile_base: null on our robot)
+  and a goal marker. Derived from test_scene.xml:
+    - removed <freejoint name="mobile_base"/> so the robot is welded to the world
+    - removed the table and bottle (free space for reaching)
+    - added a mocap "goal" body (visual only, never collides)
+  Load with an ABSOLUTE path (MuJoCo 3.14 mesh lookup breaks with relative paths).
+-->
+<mujoco model="reachy2 reach scene">
+	<compiler angle="radian"/>
+
+	<option impratio="5">
+		<flag multiccd="enable"/>
+	</option>
+
+	<include file="reachy2/reachy2_asset.xml" />
+
+	<default>
+		<geom friction="0.1 0.005 0.0001"/>
+	</default>
+
+	<visual>
+		<headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0" />
+		<rgba haze="0.15 0.25 0.35 1" />
+		<global azimuth="150" elevation="-20" />
+	</visual>
+
+	<asset>
+		<texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512"
+			height="3072" />
+		<texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4"
+			rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300" />
+		<material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5"
+			reflectance="0.2" />
+	</asset>
+
+	<worldbody>
+		<light pos="0 0 3" dir="0 0 -1" directional="false" />
+		<body name="floor">
+			<geom contype="1" conaffinity="2" friction=".1 0.005 0.0001" name="floor" pos="0 0 0"
+				size="0 0 .25" type="plane" material="groundplane" condim="3"
+				solimp="0 0.95 0.001 0.5 2" solref="0.02 1" margin="0"/>
+		</body>
+
+		<body name="reachy" pos="0 0 0" euler="0 0 0">
+			<!-- no freejoint: base welded to the world -->
+			<include file="reachy2/reachy2_body.xml"/>
+		</body>
+
+		<!-- Goal marker: move it with data.mocap_pos. Visual only (no collisions). -->
+		<body name="goal" mocap="true" pos="0.35 -0.25 0.75">
+			<geom name="goal" type="sphere" size="0.02" rgba="0.1 0.9 0.2 0.7"
+				contype="0" conaffinity="0" group="2"/>
+		</body>
+	</worldbody>
+</mujoco>
