@@ -86,8 +86,8 @@ class MujocoBackend:
         if self._renderer is None:
             self._renderer = mujoco.Renderer(self.model, height=height, width=width)
         camera = mujoco.MjvCamera()
-        mujoco.mjv_defaultFreeCamera(self.model, camera)
-        camera.distance, camera.elevation = 1.8, -15
+        camera.lookat[:] = [0.15, -0.15, 0.9]
+        camera.distance, camera.azimuth, camera.elevation = 2.2, 205, -12
         self._renderer.update_scene(self.data, camera=camera)
         return self._renderer.render()
 
