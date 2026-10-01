@@ -5,3 +5,4 @@ runs/
 third_party/
 .DS_Store
 .pytest_cache/
+*.egg-info/

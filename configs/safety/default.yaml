@@ -1,0 +1,7 @@
+# Safety limits for the right arm. Angles in degrees, positions in meters (torso frame).
+max_delta_per_step_deg: 5.0   # at 20 Hz = 100 deg/s max
+joint_margin_deg: 5.0         # stay this far inside the model's joint limits
+workspace_box_m:              # goal region in front of the robot
+  x: [0.15, 0.65]
+  y: [-0.60, 0.05]
+  z: [-0.40, 0.25]
