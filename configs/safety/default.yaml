@@ -5,3 +5,12 @@ workspace_box_m:              # goal region in front of the robot
   x: [0.15, 0.65]
   y: [-0.60, 0.05]
   z: [-0.40, 0.25]
+
+joint_limits_deg: #Apply this order across files
+  r_shoulder_pitch: [-120, 30]
+  r_shoulder_roll:  [-90, 0]
+  r_elbow_yaw:      [-60, 60]
+  r_elbow_pitch:    [-125, 0]
+  r_wrist_roll:     [-15, 15]
+  r_wrist_pitch:    [-15, 15]
+  r_wrist_yaw:      [-60, 60]

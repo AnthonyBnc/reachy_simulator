@@ -7,22 +7,28 @@ import numpy as np
 
 
 class SafetyShield:
-    def __init__(self, joint_limits, max_delta_deg=5.0, margin_deg=5.0, workspace_box=None):
+    def __init__(self, joint_limits, max_delta_deg=5.0, margin_deg=5.0, workspace_box=None, safe_range=None):
         limits = np.asarray(joint_limits, dtype=float)  # (7, 2) rad
         margin = np.radians(margin_deg)
         self.lo = limits[:, 0] + margin
         self.hi = limits[:, 1] - margin
+        if safe_range is not None:
+            safe = np.asarray(safe_range, dtype=float)
+            self.lo = np.maximum(self.lo, safe[:, 0])
+            self.hi = np.minimum(self.hi, safe[:, 1])
         self.max_delta = np.radians(max_delta_deg)
         self.box = None if workspace_box is None else np.asarray(workspace_box, dtype=float)  # (3, 2)
 
     @classmethod
     def from_config(cls, cfg, joint_limits):
         box = cfg.get("workspace_box_m")
+        safe = cfg.get("joint_limits_deg") #SDK joint order 
         return cls(
             joint_limits,
             max_delta_deg=cfg["max_delta_per_step_deg"],
             margin_deg=cfg["joint_margin_deg"],
             workspace_box=None if box is None else [box["x"], box["y"], box["z"]],
+            safe_range=None if safe is None else np.radians(list(safe.values())),
         )
 
     def distance_outside_box(self, p):
