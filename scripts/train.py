@@ -1,7 +1,7 @@
 """Train SAC on ReachyReach-v0 (headless) and record a video of the whole training.
 
     python scripts/train.py --name fixed --goal 0.40 -0.20 0.00 --steps 30000    # one fixed point
-    python scripts/train.py --name any --steps 200000                             # any point in the box
+    python scripts/train.py --name any --no-wrist --steps 200000                  # any point, 4 joints
     tensorboard --logdir runs
 
 The video runs/<name>/training.mp4 shows one test episode at the start and after every
@@ -25,11 +25,12 @@ ROOT = Path(__file__).resolve().parents[1]
 class TrainingVideo(BaseCallback):
     """Every `every` steps, run one test episode with the current policy and add it to one MP4."""
 
-    def __init__(self, path, every, total_steps, fixed_goal=None, seed=123):
+    def __init__(self, path, every, total_steps, fixed_goal=None, control_wrist=True, seed=123):
         super().__init__()
         self.path, self.every, self.total_steps, self.seed = str(path), every, total_steps, seed
         # A separate env only for filming, so the training env stays headless and fast
-        self.video_env = gym.make("ReachyReach-v0", render_mode="rgb_array", fixed_goal=fixed_goal)
+        self.video_env = gym.make("ReachyReach-v0", render_mode="rgb_array", fixed_goal=fixed_goal,
+                                  control_wrist=control_wrist)
         self.writer = None
 
     def _record_episode(self):
@@ -76,18 +77,22 @@ parser.add_argument("--steps", type=int, default=100_000)
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--video-every", type=int, help="film a test episode every N steps (default: 10%% of --steps)")
 parser.add_argument("--no-video", action="store_true")
+parser.add_argument("--no-wrist", action="store_true",
+                    help="control only the 4 shoulder/elbow joints; the wrist stays at 0")
 args = parser.parse_args()
 
 run_dir = ROOT / "runs" / args.name
 run_dir.mkdir(parents=True, exist_ok=True)
 
-env = Monitor(gym.make("ReachyReach-v0", fixed_goal=args.goal), info_keywords=("is_success",))
+env = Monitor(gym.make("ReachyReach-v0", fixed_goal=args.goal, control_wrist=not args.no_wrist),
+              info_keywords=("is_success",))
 model = SAC("MultiInputPolicy", env, seed=args.seed, verbose=1, tensorboard_log=str(ROOT / "runs"))
 
 callback = None
 if not args.no_video:
     every = args.video_every or max(1, args.steps // 10)
-    callback = TrainingVideo(run_dir / "training.mp4", every, args.steps, fixed_goal=args.goal)
+    callback = TrainingVideo(run_dir / "training.mp4", every, args.steps, fixed_goal=args.goal,
+                             control_wrist=not args.no_wrist)
 
 model.learn(total_timesteps=args.steps, tb_log_name=args.name, log_interval=20, callback=callback)
 model.save(run_dir / "model")

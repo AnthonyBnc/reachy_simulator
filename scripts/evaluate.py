@@ -11,9 +11,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--model", required=True)
 parser.add_argument("--goal", type=float, nargs=3, metavar=("X", "Y", "Z"))
 parser.add_argument("--episodes", type=int, default=100)
+parser.add_argument("--no-wrist", action="store_true",
+                    help="use this for models trained with --no-wrist")
 args = parser.parse_args()
 
-env = gym.make("ReachyReach-v0", fixed_goal=args.goal)
+env = gym.make("ReachyReach-v0", fixed_goal=args.goal, control_wrist=not args.no_wrist)
 model = SAC.load(args.model)
 reached, held, final_cm, time_to_reach, interventions = [], [], [], [], []
 for ep in range(args.episodes):
