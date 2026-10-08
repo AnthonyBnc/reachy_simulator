@@ -20,7 +20,7 @@ parser.add_argument("--episodes", type=int, default=3)
 parser.add_argument("--out", default=str(ROOT / "runs" / "reach.mp4"))
 args = parser.parse_args()
 
-env = gym.make("ReachyReach-v0", render_mode="rgb_array")
+env = gym.make("ReachyReach-v0", render_mode="rgb_array", fixed_goal=[0.40, -0.20, 0.00])
 model = None
 if args.model:
     from stable_baselines3 import SAC
