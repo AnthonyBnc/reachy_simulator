@@ -4,17 +4,24 @@
     python scripts/train.py --name any --no-wrist --steps 200000                  # any point, 4 joints
     tensorboard --logdir runs
 
-The video runs/<name>/training.mp4 shows one test episode at the start and after every
-10% of training, so you can watch the policy improve.
+Every run gets its own folder runs/<name>_<date>_<time>/ (never overwritten) with:
+    args.json            how this policy was trained (goal, steps, --no-wrist, ...)
+    monitor.monitor.csv  one line per episode: reward, length, time, success
+    checkpoints/         the policy after every 10% of training
+    model.zip            the final policy
+    training.mp4         one test episode at the start and after every 10% of training
+Plot reward vs steps with:  python scripts/plot_rewards.py runs/<run folder>
 """
 
 import argparse
+import json
+from datetime import datetime
 from pathlib import Path
 
 import cv2
 import gymnasium as gym
 from stable_baselines3 import SAC
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 
 import reachy_sim  # noqa: F401  (registers ReachyReach-v0)
@@ -75,25 +82,27 @@ parser.add_argument("--goal", type=float, nargs=3, metavar=("X", "Y", "Z"),
                     help="fixed goal in the torso frame (m). Omit for random goals.")
 parser.add_argument("--steps", type=int, default=100_000)
 parser.add_argument("--seed", type=int, default=0)
-parser.add_argument("--video-every", type=int, help="film a test episode every N steps (default: 10%% of --steps)")
+parser.add_argument("--video-every", type=int, help="film a test episode and save a checkpoint every N steps (default: 10%% of --steps)")
 parser.add_argument("--no-video", action="store_true")
 parser.add_argument("--no-wrist", action="store_true",
                     help="control only the 4 shoulder/elbow joints; the wrist stays at 0")
 args = parser.parse_args()
 
-run_dir = ROOT / "runs" / args.name
-run_dir.mkdir(parents=True, exist_ok=True)
+run_name = f"{args.name}_{datetime.now():%Y%m%d_%H%M%S}"  # a new folder every run, never overwrite
+run_dir = ROOT / "runs" / run_name
+run_dir.mkdir(parents=True)
+(run_dir / "args.json").write_text(json.dumps(vars(args), indent=2))  # how this policy was trained
 
 env = Monitor(gym.make("ReachyReach-v0", fixed_goal=args.goal, control_wrist=not args.no_wrist),
-              info_keywords=("is_success",))
+              filename=str(run_dir / "monitor"), info_keywords=("is_success",))
 model = SAC("MultiInputPolicy", env, seed=args.seed, verbose=1, tensorboard_log=str(ROOT / "runs"))
 
-callback = None
+every = args.video_every or max(1, args.steps // 10)
+callbacks = [CheckpointCallback(save_freq=every, save_path=str(run_dir / "checkpoints"), name_prefix="model")]
 if not args.no_video:
-    every = args.video_every or max(1, args.steps // 10)
-    callback = TrainingVideo(run_dir / "training.mp4", every, args.steps, fixed_goal=args.goal,
-                             control_wrist=not args.no_wrist)
+    callbacks.append(TrainingVideo(run_dir / "training.mp4", every, args.steps, fixed_goal=args.goal,
+                                   control_wrist=not args.no_wrist))
 
-model.learn(total_timesteps=args.steps, tb_log_name=args.name, log_interval=20, callback=callback)
+model.learn(total_timesteps=args.steps, tb_log_name=run_name, log_interval=20, callback=callbacks)
 model.save(run_dir / "model")
-print(f"Saved runs/{args.name}/model.zip")
+print(f"Saved runs/{run_name}/model.zip")
