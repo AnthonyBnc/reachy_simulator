@@ -3,9 +3,9 @@
 import argparse
 import gymnasium as gym
 import numpy as np
-from stable_baselines3 import SAC
 
 import reachy_sim
+from reachy_sim.algos import load_model
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", required=True)
@@ -16,7 +16,7 @@ parser.add_argument("--no-wrist", action="store_true",
 args = parser.parse_args()
 
 env = gym.make("ReachyReach-v0", fixed_goal=args.goal, control_wrist=not args.no_wrist)
-model = SAC.load(args.model)
+model = load_model(args.model)
 reached, held, final_cm, time_to_reach, interventions = [], [], [], [], []
 for ep in range(args.episodes):
     obs, _ = env.reset(seed=10_000 + ep)  # goals and start poses never seen in training

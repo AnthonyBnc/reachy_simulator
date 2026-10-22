@@ -11,7 +11,7 @@ import cv2
 import gymnasium as gym
 
 import reachy_sim  # noqa: F401  (registers ReachyReach-v0)
-
+from reachy_sim.algos import load_model
 ROOT = Path(__file__).resolve().parents[1]
 
 parser = argparse.ArgumentParser()
@@ -23,9 +23,7 @@ args = parser.parse_args()
 env = gym.make("ReachyReach-v0", render_mode="rgb_array", fixed_goal=[0.40, -0.20, 0.00])
 model = None
 if args.model:
-    from stable_baselines3 import SAC
-
-    model = SAC.load(args.model)
+    model = load_model(args.model)
 
 Path(args.out).parent.mkdir(parents=True, exist_ok=True)
 writer = None
