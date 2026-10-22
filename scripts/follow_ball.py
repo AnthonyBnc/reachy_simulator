@@ -16,16 +16,16 @@ import time
 import gymnasium as gym
 import mujoco.viewer
 import numpy as np
-from stable_baselines3 import SAC
 
 import reachy_sim  # noqa: F401
+from reachy_sim.algos import load_model
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", required=True)
 args = parser.parse_args()
 
 env = gym.make("ReachyReach-v0", control_wrist=False).unwrapped
-model = SAC.load(args.model)
+model = load_model(args.model)
 backend = env.backend
 obs, _ = env.reset()
 

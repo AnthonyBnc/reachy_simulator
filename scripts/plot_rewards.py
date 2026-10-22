@@ -19,6 +19,9 @@ args = parser.parse_args()
 
 fig, (ax_reward, ax_success) = plt.subplots(2, 1, sharex=True, figsize=(9, 7))
 for run in args.runs:
+    if not (run / "monitor.monitor.csv").exists():  # e.g. the TensorBoard folders runs/<run>_1 matched by a *
+        print(f"{run}: no monitor.monitor.csv, skipped")
+        continue
     with open(run / "monitor.monitor.csv") as f:
         next(f)  # the first line is a JSON comment written by Monitor
         rows = list(csv.DictReader(f))
