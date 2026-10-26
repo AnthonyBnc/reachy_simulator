@@ -6,6 +6,7 @@
 
 import argparse
 import csv
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -36,9 +37,16 @@ for run in args.runs:
     w = max(1, min(args.window, len(rows) // 5))  # short runs: smaller window, so there is still a curve
     smooth = lambda y: np.convolve(y, np.ones(w) / w, mode="valid")  # moving average
 
+    label = run.name  # runs from before args.json existed keep their folder name
+    if (run / "args.json").exists():
+        run_args = json.loads((run / "args.json").read_text())
+        label = run_args.get("algo", "sac").upper()
+        if run_args.get("seed", 0):
+            label += f" (seed {run_args['seed']})"  # keeps several runs of one algorithm apart
+
     raw, = ax_reward.plot(steps, reward, alpha=0.2)
-    ax_reward.plot(steps[w - 1:], smooth(reward), color=raw.get_color(), label=f"{run.name} (avg of {w})")
-    ax_success.plot(steps[w - 1:], 100 * smooth(success), color=raw.get_color(), label=run.name)
+    ax_reward.plot(steps[w - 1:], smooth(reward), color=raw.get_color(), label=label)
+    ax_success.plot(steps[w - 1:], 100 * smooth(success), color=raw.get_color(), label=label)
 
 ax_reward.set_ylabel("episode reward")
 ax_reward.set_title("Reward and success vs. training steps (faint: each episode, solid: moving average)")
@@ -46,7 +54,7 @@ ax_success.set_ylabel("success (%)")
 ax_success.set_xlabel("training steps")
 for ax in (ax_reward, ax_success):
     ax.grid(alpha=0.3)
-    ax.legend()
+    ax.legend(loc="lower right")
 
 out = args.out or args.runs[0] / "reward.png"
 fig.tight_layout()
