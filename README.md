@@ -2,7 +2,7 @@
 
 A MuJoCo + Gymnasium setup for **Pollen Robotics' Reachy 2**. You train reinforcement learning policies in simulation, then run them on the real robot through the same interface.
 
-> **Status:** P0 in progress. The environment is set up and the Reachy 2 model loads in MuJoCo. Training and evaluation commands are **planned**.
+> **Status:** Task 1 (Reach) works in simulation: SAC reaches 97% of random goals. Training guide: [docs/TASK1_REACH.md](docs/TASK1_REACH.md)
 >
 > - Next steps: [docs/SIMULATION_PHASE.md](docs/SIMULATION_PHASE.md)
 > - Full design and roadmap: [docs/PROJECT_BASELINE.md](docs/PROJECT_BASELINE.md)
@@ -130,7 +130,7 @@ tensorboard --logdir runs
 | ID | Task | Status |
 |---|---|---|
 | T0 | Joint tracking (sim vs. real calibration) | Planned |
-| T1 | Reach: end-effector to 3D goal | Planned |
+| T1 | Reach: end-effector to 3D goal | ✅ Done in sim ([guide](docs/TASK1_REACH.md)) |
 | T2 | Reach with orientation: 6D pose | Planned |
 | T3 | Head tracking with `look_at` | Planned |
 | T4 | Grasp ball | Planned |
