@@ -1,0 +1,14 @@
+{
+  "name": "fixed_goal",
+  "goal": [
+    0.4,
+    -0.2,
+    0.0
+  ],
+  "algo": "ddpg",
+  "steps": 500000,
+  "seed": 0,
+  "video_every": null,
+  "no_video": false,
+  "no_wrist": true
+}
