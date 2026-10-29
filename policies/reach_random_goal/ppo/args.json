@@ -1,0 +1,10 @@
+{
+  "name": "random_goal",
+  "goal": null,
+  "algo": "ppo",
+  "steps": 500000,
+  "seed": 0,
+  "video_every": null,
+  "no_video": false,
+  "no_wrist": true
+}
