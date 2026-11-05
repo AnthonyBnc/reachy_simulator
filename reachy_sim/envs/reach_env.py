@@ -16,7 +16,7 @@ class ReachEnv(gym.Env):
     def __init__(self, render_mode=None, reward_type="dense", max_steps=100, success_threshold=0.03,
                  fixed_goal=None, control_wrist = True):                                                    
         cfg = yaml.safe_load((CONFIGS / "safety" / "default.yaml").read_text())
-        self.backend = MujocoBackend(control_hz=20)
+        self.backend = MujocoBackend(control_hz=1)
         self.shield = SafetyShield.from_config(cfg, self.backend.joint_limits)
         self.max_delta = np.radians(cfg["max_delta_per_step_deg"])
         self.render_mode = render_mode

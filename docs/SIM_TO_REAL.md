@@ -75,4 +75,8 @@ Move one joint at a time by a small positive amount (+10°): in the viewer with 
 
 _To be filled: step responses sim vs. real, fitted `kp` / `kv` / damping / latency._
 
+First real data (2026-10-15, `scripts/run_real.py`, 20 Hz `send_goal_positions`, see [RUN_REAL.md §8](RUN_REAL.md)): the largest joint lag behind the command was ≤ 5° at 30% speed (≤ 30°/s per joint) and ≤ 8.4° at 50% (≤ 50°/s). The reach policy trained in simulation succeeded on the real arm with a 0.4–1.2 cm final error, without any tuning.
+
+Real rest pose of the right arm (motors off): `[1.0, 26.9, -10.0, -0.1, -0.1, 0.3, -0.1]` deg. Shoulder roll is +27°, **outside** the shield's soft limit (−90 … 0°), so policies must start from the zero pose (`run_real.py` moves the arm there first).
+
 Baseline in sim (`scripts/ex1_one_joint.py`, `r_elbow_pitch` 0 → −90°, `kp=500 kv=10`): overshoot to −90.25° at 0.6 s, settles at −89.55° (0.45° gravity error).
