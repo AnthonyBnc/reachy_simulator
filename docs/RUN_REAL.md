@@ -59,7 +59,8 @@ the measured angle makes the arm sag under gravity. Training uses the same conve
 | Safety shield | Same limits as in training: joint limits, step limit, workspace box. |
 | Tracking watchdog | Live: if the real arm is more than 15° behind the command, the script stops. |
 | Goal clipping | The goal is moved inside the safety box if it is outside; a message is printed. |
-| Safe stop | On success, the time limit, an error or Ctrl+C, the arm is turned off with `turn_off_smoothly()` and lowers slowly. |
+| No time limit | The run continues until `SUCCESS`, the watchdog, an error or Ctrl+C. If `dist` stops shrinking, press Ctrl+C. |
+| Safe stop | On success, the watchdog, an error or Ctrl+C, the arm is turned off with `turn_off_smoothly()` and lowers slowly. |
 
 **The E-stop is still the main safety device.** Keep it in hand during every live run.
 
@@ -122,7 +123,6 @@ Expected: `RESULT: USABLE`, all tests pass, and `pos err` under 10 mm on every p
 | `--host` | `10.116.19.109` | Robot IP |
 | `--live` | off | Really move the robot. Without it: dry run. |
 | `--speed` | `0.5` | Fraction of the trained max speed (0 to 1) |
-| `--seconds` | `10` | Time limit |
 
 **Allowed goal region** (safety box, `configs/safety/default.yaml`):
 x 0.15 to 0.65 m, y −0.60 to 0.05 m, z −0.40 to 0.25 m.
@@ -133,7 +133,7 @@ A good first goal, close to the arm and low: `0.35 -0.30 -0.25`.
 python scripts/run_real.py --model runs/any/model.zip --no-wrist --goal 0.35 -0.30 -0.25
 ```
 **Good result:** `dist` gets smaller on each line, then `SUCCESS`, with few shield
-interventions. **Bad result:** `Time limit reached`, `dist` not shrinking, or `workspace` /
+interventions. **Bad result:** `dist` not shrinking, or `workspace` /
 `joint_limit` on most lines. Do not go live in that case.
 
 ### Step 2: live, slow
@@ -176,8 +176,8 @@ Shield interventions: 1 in 57 steps.
 | `Could not connect to Reachy` | Wrong IP, or not on the robot's network | Check `--host`; run `check_reachy_access.py` from `reachy2-robot-controller` |
 | `Goal moved inside the safety box` | Goal outside the allowed region | Pick a goal inside the box (section 4) |
 | `STOP: arm is N deg behind the command` | The motors don't follow fast enough | Lower `--speed` |
-| `Time limit reached` | Goal not reached in time | Check the dry run first; try a closer goal or a longer `--seconds` |
 | Many `workspace` / `joint_limit` lines | The policy pushes against the safety limits | Choose a different goal; don't increase speed |
+| `dist` frozen and `workspace` on every line, `lag 0.0` | Shield deadlock (see section 8.2) | Ctrl+C (there is no time limit), then run again |
 | Shape error when loading the model | `--no-wrist` doesn't match the training | Use `--no-wrist` for models trained with it, and leave it out otherwise |
 
 ---
@@ -191,6 +191,49 @@ Shield interventions: 1 in 57 steps.
 - **Shield interventions were 7.8% of steps in simulation** (project target: under 1%).
 - **One fixed goal per run.** There's no moving target on the real robot yet (`follow_ball.py`
   is simulation only).
-- **Tested so far:** the live path against a fake robot that copies commands exactly
-  (success in 2.8 s, 1 shield intervention). Not yet tested: the dry-run path, and anything
-  on the real robot.
+- **Shield deadlock:** the run can freeze short of the goal (section 8.2). Not fixed yet.
+- **Tested on the real robot:** 4 live runs, 2 goals, 30% and 50% speed (section 8). Not yet
+  tested: the dry-run path, goals elsewhere in the safety box, and speeds above 50%.
+
+---
+
+## 8. Real-robot results (2026-10-15)
+
+Robot `10.116.19.109`, model `runs/any/model.zip` (SAC, `--no-wrist`, 200k steps, 97% success in
+simulation), `--seconds 10`. Every run started from the rest pose
+`[1.0, 26.9, -10.0, -0.1, -0.1, 0.3, -0.1]` deg (27° from zero, mostly shoulder roll), so the
+script first moved the arm to the zero pose in 4 s.
+
+### 8.1 Runs
+
+| # | Goal (m) | Speed | Result | Time | Final distance | Shield interventions | Max lag |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.35, −0.30, −0.25 | 30% | **Stuck** (time limit) | 10 s | 17.6 cm | 171 / 200 steps | 4.6° |
+| 2 | 0.35, −0.30, −0.25 | 50% | **Success** | 2.9 s | 1.1 cm | 2 / 59 | 8.4° |
+| 3 | 0.35, −0.30, −0.25 | 30% | **Success** | 4.2 s | 0.4 cm | 4 / 85 | 4.8° |
+| 4 | 0.40, −0.25, −0.10 | 30% | **Success** | 4.4 s | 1.2 cm | 0 / 89 | 5.1° |
+
+**3 of 4 runs succeeded**, with a final error of 0.4 to 1.2 cm. That's in line with simulation
+(1.0 cm mean). The motors followed the 20 Hz commands well: lag stayed under 5° at 30% speed and
+under 9° at 50%, far from the 15° watchdog limit. Paths and joint angles were nearly the same as
+in simulation.
+
+### 8.2 Run 1: shield deadlock
+
+Run 1 followed the same path as run 3 until t = 1.6 s, at 17.6 cm from the goal. Then the
+shield's workspace rule ("never move the hand further outside the box") rejected the step and
+froze all joints. Once the arm stopped (`lag 0.0`), the observation no longer changed. The
+policy is deterministic, so it repeated the same action every step, the shield rejected it
+every time, and the arm stayed still until the time limit (171 interventions).
+
+Run 3 hit the same rule once at t = 1.7 s but continued. The only difference is tiny noise in
+the measured angles, so this can happen at random on any run.
+
+**Possible fixes (not done yet):** have the workspace rule clip the step instead of freezing all
+joints; or give the policy a training penalty, so it learns paths that stay inside the box.
+
+### 8.3 Next
+
+- Fix the deadlock (8.2), then repeat goal 1 several times to confirm.
+- Test more goals across the safety box, then 50% speed as the default.
+- Domain randomization (`docs/SIMULATION_PHASE.md`, Step 4) to make the policy more robust.

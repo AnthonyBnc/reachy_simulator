@@ -4,16 +4,20 @@
     python scripts/run_real.py --model runs/any/model.zip --no-wrist --goal 0.35 -0.30 -0.25 --live --speed 0.3
     python scripts/run_real.py --model runs/any/model.zip --no-wrist --goal 0.35 -0.30 -0.25 --fake --live
 
-See docs/RUN_REAL.md.
+Every run adds one row to results/runs.csv and saves its steps to results/traces/.
+Compare dry runs (sim) and live runs (real) with scripts/compare_runs.py. See docs/RUN_REAL.md.
 """
 
 import argparse
+import csv
 import time
+from datetime import datetime
+from pathlib import Path
 
 import gymnasium as gym
 import mujoco
 import numpy as np
-from stable_baselines3 import SAC
+from reachy_sim.algos import load_model
 
 import reachy_sim  # noqa: F401  (registers ReachyReach-v0)
 
@@ -22,22 +26,22 @@ parser.add_argument("--model", required=True)
 parser.add_argument("--goal", type=float, nargs=3, required=True, metavar=("X", "Y", "Z"),
                     help="goal in the torso frame (m): x forward, y left, z up")
 parser.add_argument("--no-wrist", action="store_true", help="required for models trained with --no-wrist")
-parser.add_argument("--host", default="10.116.19.109")
+parser.add_argument("--host", default="10.116.19.196")
 parser.add_argument("--live", action="store_true", help="really move the robot (default: dry run)")
 parser.add_argument("--speed", type=float, default=0.5, help="fraction of the trained max speed (0 to 1)")
-parser.add_argument("--seconds", type=float, default=10.0)
 parser.add_argument("--fake", action="store_true", help="test only: fake robot that copies commands")
+parser.add_argument("--results", default="results", help="folder for runs.csv and traces/")
 args = parser.parse_args()
 
 LAG_LIMIT_DEG = 15.0   # watchdog
-SUCCESS_STEPS = 20     # 20 steps x 50 ms = held for 1 s
+SUCCESS_STEPS = 20     # steps in a row within 3 cm
 
 # ---------- 1. Same env and policy as training ----------
 env = gym.make("ReachyReach-v0", control_wrist=not args.no_wrist).unwrapped
-model = SAC.load(args.model)
+model = load_model(args.model)
 env.reset(seed=0)
 backend = env.backend
-dt = backend.dt  # 0.05 s
+dt = backend.dt  # seconds per step (1 / control_hz in ReachEnv)
 
 speed = float(np.clip(args.speed, 0.0, 1.0))
 env.max_delta *= speed          # how far one action can move a joint
@@ -130,11 +134,11 @@ env.q_cmd = q_start.copy()  # last command, NOT the measured angle (or the arm s
 env.prev_action = np.zeros(env.n_act)
 q_prev = q_start.copy()
 
-# ---------- 4. Control loop (20 Hz) ----------
+# ---------- 4. Control loop (no time limit: stops on success, watchdog or Ctrl+C) ----------
 held, steps, interventions = 0, 0, 0
-t0 = time.perf_counter()
+result, distance, max_lag, t_reach, trace = "error", float("nan"), 0.0, None, []
 try:
-    while time.perf_counter() - t0 < args.seconds:
+    while True:
         start = time.perf_counter()
 
         if args.live:
@@ -147,6 +151,7 @@ try:
             lag = float(np.max(np.abs(np.degrees(env.q_cmd - q))))
             if lag > LAG_LIMIT_DEG:
                 print(f"STOP: arm is {lag:.1f} deg behind the command")
+                result, max_lag = "watchdog", max(max_lag, lag)  # log the lag that tripped it
                 break
 
             # Observation -> policy
@@ -176,19 +181,48 @@ try:
         steps += 1
         interventions += bool(reasons)
         held = held + 1 if distance < env.success_threshold else 0
-        if steps % 20 == 0 or reasons:
+        max_lag = max(max_lag, lag)
+        if t_reach is None and distance < env.success_threshold:
+            t_reach = steps * dt
+        trace.append([round(steps * dt, 3), round(100 * distance, 2), round(lag, 2), " ".join(reasons),
+                      *np.round(np.degrees(env.q_cmd), 2)])
+        if steps % max(1, round(1 / dt)) == 0 or reasons:  # about once a second
             print(f"t={steps * dt:4.1f}s  dist {100 * distance:5.1f} cm  "
                   f"cmd (deg) {np.round(np.degrees(env.q_cmd), 1)}  lag {lag:4.1f}  {' '.join(reasons)}")
         if held >= SUCCESS_STEPS:
-            print(f"SUCCESS: held the goal for 1 s, final distance {100 * distance:.1f} cm.")
+            print(f"SUCCESS: held the goal for {SUCCESS_STEPS * dt:.0f} s, final distance {100 * distance:.1f} cm.")
+            result = "success"
             break
 
-        time.sleep(max(0.0, dt - (time.perf_counter() - start)))  # keep 50 ms per step
-    else:
-        print("Time limit reached.")
+        time.sleep(max(0.0, dt - (time.perf_counter() - start)))  # keep dt per step
 except KeyboardInterrupt:
     print("Stopped by Ctrl+C.")
+    result = "ctrl+c"
 finally:
     print(f"Shield interventions: {interventions} in {steps} steps.")
     if args.live:
         arm.turn_off_smoothly()  # lowers the arm slowly, always runs
+
+    # ---------- 5. Log the run ----------
+    model_path = Path(args.model)
+    policy = f"{model_path.parent.parent.name}/{model_path.parent.name}"  # e.g. reach_fixed_goal/sac
+    mode = ("fake" if args.fake else "real") if args.live else "sim"
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out = Path(args.results)
+    trace_file = out / "traces" / f"{stamp}_{mode}_{policy.replace('/', '_')}.csv"
+    trace_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(trace_file, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["t_s", "dist_cm", "lag_deg", "shield"] + [f"cmd{i}_deg" for i in range(7)])
+        w.writerows(trace)
+    runs_file = out / "runs.csv"
+    new = not runs_file.exists()
+    with open(runs_file, "a", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["time", "policy", "mode", "goal", "speed", "hz", "result", "steps",
+                        "t_reach_s", "final_cm", "interventions", "max_lag_deg", "trace"])
+        w.writerow([stamp, policy, mode, " ".join(f"{g:.2f}" for g in goal), speed, round(1 / dt), result, steps,
+                    "" if t_reach is None else round(t_reach, 2), round(100 * distance, 2), interventions,
+                    round(max_lag, 2), trace_file.name])
+    print(f"Logged to {runs_file}")
